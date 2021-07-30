@@ -671,6 +671,8 @@ int main(int argc, char* argv[]) {
     app.add_option("--evm", evm_path, "Path to EVMC-compliant VM");
     std::string tests_path{SILKWORM_CONSENSUS_TEST_DIR};
     app.add_option("--tests", tests_path, "Path to consensus tests", true)->check(CLI::ExistingDirectory);
+    std::string test_name{};
+    app.add_option("--testname", test_file, "Test name");
     CLI11_PARSE(app, argc, argv);
 
     if (!evm_path.empty()) {
@@ -687,11 +689,22 @@ int main(int argc, char* argv[]) {
     const fs::path root_dir{tests_path};
 
     for (const auto& entry : kDifficultyConfig) {
-        res += run_test_file(root_dir / kDifficultyDir / entry.first, difficulty_test, entry.second);
+        auto p = root_dir / kDifficultyDir / entry.first;
+        if (!test_file.empty()) {
+            if (entry.first != p) {
+                continue;
+            }
+        }
+        res += run_test_file(p, difficulty_test, entry.second);
     }
 
     for (auto i = fs::recursive_directory_iterator(root_dir / kBlockchainDir); i != fs::recursive_directory_iterator{};
          ++i) {
+        if (!test_file.empty()) {
+            if (i->path() != test_file) {
+                continue;
+            }
+        }
         if (exclude_test(*i, root_dir)) {
             res += kSkippedTest;
             i.disable_recursion_pending();
@@ -702,6 +715,11 @@ int main(int argc, char* argv[]) {
 
     for (auto i = fs::recursive_directory_iterator(root_dir / kTransactionDir); i != fs::recursive_directory_iterator{};
          ++i) {
+        if (!test_file.empty()) {
+            if (i->path() != test_file) {
+                continue;
+            }
+        }
         if (exclude_test(*i, root_dir)) {
             res += kSkippedTest;
             i.disable_recursion_pending();
