@@ -535,7 +535,8 @@ static constexpr RunResults kSkippedTest{
     1,  // skipped
 };
 
-RunResults run_test_file(const fs::path& file_path, Status (*runner)(const nlohmann::json&, std::optional<ChainConfig>),
+RunResults run_test_file(const fs::path& file_path, const std::string& test_name,
+                         Status (*runner)(const nlohmann::json&, std::optional<ChainConfig>),
                          std::optional<ChainConfig> config = std::nullopt) {
     std::ifstream in{file_path.string()};
     nlohmann::json json;
@@ -551,6 +552,11 @@ RunResults run_test_file(const fs::path& file_path, Status (*runner)(const nlohm
     RunResults res{};
 
     for (const auto& test : json.items()) {
+        if (!test_name.empty()) {
+            if (test.key() != test_name) {
+                continue;
+            }
+        }
         Status status{runner(test.value(), config)};
         res.add(status);
         if (status != Status::kPassed) {
@@ -672,7 +678,7 @@ int main(int argc, char* argv[]) {
     std::string tests_path{SILKWORM_CONSENSUS_TEST_DIR};
     app.add_option("--tests", tests_path, "Path to consensus tests", true)->check(CLI::ExistingDirectory);
     std::string test_name{};
-    app.add_option("--testname", test_file, "Test name");
+    app.add_option("--testname", test_name, "Test name");
     CLI11_PARSE(app, argc, argv);
 
     if (!evm_path.empty()) {
@@ -690,41 +696,26 @@ int main(int argc, char* argv[]) {
 
     for (const auto& entry : kDifficultyConfig) {
         auto p = root_dir / kDifficultyDir / entry.first;
-        if (!test_file.empty()) {
-            if (entry.first != p) {
-                continue;
-            }
-        }
-        res += run_test_file(p, difficulty_test, entry.second);
+        res += run_test_file(p, test_name, difficulty_test, entry.second);
     }
 
     for (auto i = fs::recursive_directory_iterator(root_dir / kBlockchainDir); i != fs::recursive_directory_iterator{};
          ++i) {
-        if (!test_file.empty()) {
-            if (i->path() != test_file) {
-                continue;
-            }
-        }
         if (exclude_test(*i, root_dir)) {
             res += kSkippedTest;
             i.disable_recursion_pending();
         } else if (fs::is_regular_file(i->path())) {
-            res += run_test_file(*i, blockchain_test);
+            res += run_test_file(*i, test_name, blockchain_test);
         }
     }
 
     for (auto i = fs::recursive_directory_iterator(root_dir / kTransactionDir); i != fs::recursive_directory_iterator{};
          ++i) {
-        if (!test_file.empty()) {
-            if (i->path() != test_file) {
-                continue;
-            }
-        }
         if (exclude_test(*i, root_dir)) {
             res += kSkippedTest;
             i.disable_recursion_pending();
         } else if (fs::is_regular_file(i->path())) {
-            res += run_test_file(*i, transaction_test);
+            res += run_test_file(*i, test_name, transaction_test);
         }
     }
 
